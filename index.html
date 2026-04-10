@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+</head>
+<body>
+
+<h2>Classroom Attendance</h2>
+<p>Take a photo to mark attendance</p>
+
+<!-- Teacher selection -->
+<select id="teacherSelect" disabled>
+  <option>Loading teachers...</option>
+</select>
+
+<br><br>
+
+<!-- Camera preview -->
+<video id="video" autoplay playsinline muted width="300"></video>
+<br><br>
+
+<!-- Capture button -->
+<button id="captureBtn" onclick="capture()" disabled>
+  Capture & Submit
+</button>
+
+<canvas id="canvas" style="display:none;"></canvas>
+
+<script>
+  console.log("Script loaded");
+
+
+  // ✅ Get classID from URL (FIXED)
+  let params = new URLSearchParams(window.location.search);
+  let classID = params.get("classID") || "CLS001";
+
+  // ✅ Start camera FAST
+  function startCamera() {
+  navigator.mediaDevices.getUserMedia({ 
+    video: { 
+      facingMode: "user",
+      width: { ideal: 640 },
+      height: { ideal: 480 }
+    },
+    audio: false
+  })
+    .then(stream => {
+      const video = document.getElementById("video");
+      video.srcObject = stream;
+
+      video.onloadedmetadata = () => {
+        video.play(); // 👈 force play
+        document.getElementById("captureBtn").disabled = false;
+        console.log("Camera ready");
+      };
+    })
+    .catch(err => {
+      alert("Camera error: " + err.message);
+      console.log("FULL ERROR:", err);
+    });
+}
+  // ✅ Load teachers
+  function loadTeachers() {
+    google.script.run
+      .withSuccessHandler(showTeachers)
+      .getTeachers();
+  }
+
+  function showTeachers(data) {
+    const select = document.getElementById("teacherSelect");
+
+    select.innerHTML = '<option value="">Select your name</option>';
+
+    data.forEach(t => {
+      const option = document.createElement("option");
+      option.value = t.id;
+      option.textContent = t.name;
+      select.appendChild(option);
+    });
+
+    // ✅ Enable dropdown after loading
+    select.disabled = false;
+  }
+
+  // ✅ Capture + prevent spam clicks
+  function capture() {
+    const btn = document.getElementById("captureBtn");
+    btn.disabled = true;
+    btn.textContent = "Processing...";
+
+    let teacherID = document.getElementById("teacherSelect").value;
+    if (!teacherID) {
+      alert("Please select your name");
+      btn.disabled = false;
+      btn.textContent = "Capture & Submit";
+      return;
+    }
+
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+
+    if (!video.videoWidth) {
+      alert("Camera initializing... please wait");
+
+      setTimeout(() => {
+        capture();
+      }, 1000);
+
+      return;
+    }
+
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(video, 0, 0);
+
+    const imageData = canvas.toDataURL("image/jpeg");
+
+    google.script.run
+      .withSuccessHandler(msg => {
+        alert(msg);
+        btn.disabled = false;
+        btn.textContent = "Capture & Submit";
+      })
+      .withFailureHandler(err => {
+        alert("Error: " + JSON.stringify(err));
+        btn.disabled = false;
+        btn.textContent = "Capture & Submit";
+      })
+      .markAttendanceWithPhoto(classID, teacherID, imageData);
+  }
+
+  // 🚀 START EVERYTHING IMMEDIATELY (FASTEST)
+  startCamera();
+  loadTeachers();
+
+</script>
+
+</body>
+</html>
